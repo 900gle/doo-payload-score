@@ -1,7 +1,7 @@
 # doo-payload-score
 Score documents with payload in elasticsearch 7.9.1
 
-document : http://www.irgroup.org/payload-score-in-elasticsearch-7.9.1/
+document : https://ldh-6019.tistory.com/222?category=1029507/
 
 ## Releases
 2022-03-28 `7.9.1` targets elasticsearch 7.9.1
