@@ -1,129 +1,113 @@
-# elasticsearch-payload-score
-Score documents with payload in elasticsearch 6.5
+# doo-payload-score
+Score documents with payload in elasticsearch 7.9.1
 
-document : http://www.irgroup.org/payload-score-in-elasticsearch-6.5/
+document : http://www.irgroup.org/payload-score-in-elasticsearch-7.9.1/
 
 ## Releases
-2018-11-22 `6.5.0-b1` targets elasticsearch 6.5.0
+2022-03-28 `7.9.1` targets elasticsearch 7.9.1
 
 ## Overview
 
 
 ## Scoring
 ```java
-int freq = postings.freq();
-float sum_payload = 0.0f;
-for(int i = 0; i < freq; i ++)
-{
-    postings.nextPosition();
-    BytesRef payload = postings.getPayload();
-    if(payload != null) {
-        sum_payload += ByteBuffer.wrap(payload.bytes, payload.offset, payload.length)
-                .order(ByteOrder.BIG_ENDIAN).getFloat();
-    }
-}
 
-return sum_payload;
 ```
 
 ## Plugin installation
-Target elasticsearch version is 6.5 and java 1.8
+Target elasticsearch version is 7.9.1 and java 1.8
 
 **simple installation**
+```shell
+#docker 
+COPY plugin/payload_score-7.9.2.zip plugin/payload_score-7.9.2.zip
+RUN elasticsearch-plugin install file:///usr/share/elasticsearch/plugin/payload_score-7.9.2.zip
 
-`$ELASTIC_HOME/bin/elasticsearch-plugin install https://github.com/focuschange/elasticsearch-payload-score/releases/download/v6.5.0-b1/payload_score-6.5.0-b1.zip`
+```
+
+
 
 ## Example
 
 **mapping & setting**
 
 ```javascript 1.8
+PUT paylaod_score_query
 {
-  "settings": {
-    "index": {
-      "number_of_shards": 2,
-      "number_of_replicas": 0
-    },
-    "analysis": {
-      "analyzer": {
-        "payload_analyzer": { 
-          "type": "custom",
-          "tokenizer": "payload_tokenizer",
-          "filter": [
-            "payload_filter"
-          ]
-        }
-      },
-      "tokenizer": {
-        "payload_tokenizer": {
-          "type": "whitespace",
-          "max_token_length": 64
-        }
-      },
-      "filter": {
-        "payload_filter": {
-          "type": "delimited_payload",
-          "encoding": "float"
-        }
+  "mappings": {
+    "properties": {
+      "color": {
+        "type": "text",
+        "term_vector": "with_positions_payloads",
+        "analyzer": "payload_delimiter"
       }
     }
   },
-  "mappings": {
-    "_doc": {
-      "properties": {
-        "key": {
-          "type": "text",
-          "analyzer" : "payload_analyzer",
-          "term_vector": "with_positions_offsets_payloads",
-          "store" : true
+  "settings": {
+    "analysis": {
+      "analyzer": {
+        "payload_delimiter": {
+          "tokenizer": "whitespace",
+          "filter": [ "delimited_payload" ]
         }
       }
     }
   }
 }
+
 ```
 
 **test collection**
 ```javascript
-{ "index" : { "_index" : "payload-test", "_type" : "_doc", "_id" : "1" } }
-{ "key" : ["yellow|3 blue|1.1 red|1" ] }
-{ "index" : { "_index" : "payload-test", "_type" : "_doc", "_id" : "2" } }
-{ "key" : ["yellow|2 yellow|2.5 blue|1 red|5"] }
-{ "index" : { "_index" : "payload-test", "_type" : "_doc", "_id" : "3" } }
-{ "key" : ["yellow|10 blue|2 red|4.3" ] }
-{ "index" : { "_index" : "payload-test", "_type" : "_doc", "_id" : "4" } }
-{ "key" : ["dark_yellow|10 blue|3 red|4.2" ] }
-{ "index" : { "_index" : "payload-test", "_type" : "_doc", "_id" : "5" } }
-{ "key" : ["yellow|102020.95 blue red|1" ] }
+POST paylaod_score_query/_doc/1
+{
+    "name" : "T-shirt S",
+    "color" : "blue|1 green|2 yellow|3"
+}
+
+POST paylaod_score_query/_doc/2
+{
+    "name" : "T-shirt M",
+    "color" : "blue|1 green|2 red|3"
+}
+
+POST paylaod_score_query/_doc/3
+{
+    "name" : "T-shirt XL",
+    "color" : "blue|1 yellow|2"
+}
+```
+
+**term 확인**
+```bash
+GET paylaod_score_query/_termvectors/1?fields=color
 ```
 
 **query**
 ```bash
-curl -H 'Content-Type: application/json' -X POST 'localhost:9200/payload-test/_search?pretty' -d '
+GET paylaod_score_query/_search
 {
   "query": {
-    "function_score": {
-      "query": {
-        "match": {
-          "key": "yellow"
-        }
-      },
-      "functions": [
+    "bool": {
+      "must": [
         {
-          "script_score": {
-            "script": {
-                "source": "payload_score",
-                "lang" : "irgroup",
-                "params": {
-                    "field": "key",
-                    "term": "yellow"
+          "match": {
+            "name": "t-shirt"
+          }
+        },
+        {
+          "span_or": {
+            "clauses": [
+              {
+                "span_term": {
+                  "color": "yellow"
                 }
-            }
+              }
+            ]
           }
         }
       ]
     }
   }
 }
-'
 ```
